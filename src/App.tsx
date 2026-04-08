@@ -57,8 +57,17 @@ import {
   doc, 
   getDoc, 
   setDoc, 
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
   FirebaseUser,
-  Timestamp
+  Timestamp,
+  handleFirestoreError,
+  OperationType
 } from './lib/firebase';
 
 // Error Boundary Component
@@ -113,7 +122,14 @@ declare global {
 }
 
 // Mock Data
-const MOCK_STATS = [];
+const MOCK_STATS = [
+  { name: 'Jan', dmft: 1.2, ohis: 2.1 },
+  { name: 'Feb', dmft: 1.5, ohis: 2.3 },
+  { name: 'Mar', dmft: 1.3, ohis: 2.0 },
+  { name: 'Apr', dmft: 1.8, ohis: 2.5 },
+  { name: 'Mei', dmft: 1.6, ohis: 2.2 },
+  { name: 'Jun', dmft: 2.0, ohis: 2.8 },
+];
 
 const MOCK_PATIENTS: Patient[] = [];
 
@@ -330,9 +346,19 @@ const Login = ({ onLogin }: { onLogin: (role: string, user?: FirebaseUser) => vo
       
       // Check if user exists in Firestore, if not create
       const userDoc = await getDoc(doc(db, 'users', user.uid));
-      let role = 'Terapis Gigi'; // Default role
+      let role = 'Pasien'; // Default role
       
       if (!userDoc.exists()) {
+        // Check if email is pre-authorized as Admin
+        const q = query(collection(db, 'authorized_emails'), where('email', '==', user.email?.toLowerCase()));
+        const authDocs = await getDocs(q).catch(err => {
+          handleFirestoreError(err, OperationType.GET, 'authorized_emails');
+          throw err;
+        });
+        if (!authDocs.empty) {
+          role = 'Admin';
+        }
+
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           email: user.email,
@@ -340,6 +366,9 @@ const Login = ({ onLogin }: { onLogin: (role: string, user?: FirebaseUser) => vo
           photoURL: user.photoURL,
           role: role,
           createdAt: Timestamp.now()
+        }).catch(err => {
+          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+          throw err;
         });
       } else {
         role = userDoc.data().role;
@@ -431,9 +460,10 @@ const Login = ({ onLogin }: { onLogin: (role: string, user?: FirebaseUser) => vo
             >
               Masuk sebagai Admin
             </button>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => handleLogin('Dokter Gigi')} className="py-2 bg-white border border-pink-200 text-pink-500 rounded-xl text-xs font-bold hover:bg-pink-50">Dokter Gigi</button>
-              <button onClick={() => handleLogin('Terapis Gigi')} className="py-2 bg-white border border-pink-200 text-pink-500 rounded-xl text-xs font-bold hover:bg-pink-50">Terapis Gigi</button>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => handleLogin('Operator')} className="py-2 bg-white border border-pink-200 text-pink-500 rounded-xl text-[10px] font-bold hover:bg-pink-50">Operator</button>
+              <button onClick={() => handleLogin('Pasien')} className="py-2 bg-white border border-pink-200 text-pink-500 rounded-xl text-[10px] font-bold hover:bg-pink-50">Pasien</button>
+              <button onClick={() => handleLogin('Dosen Pembimbing')} className="py-2 bg-white border border-pink-200 text-pink-500 rounded-xl text-[10px] font-bold hover:bg-pink-50">Dosen</button>
             </div>
           </div>
 
@@ -523,9 +553,9 @@ const Dashboard = ({ patients, user }: { patients: Patient[], user: FirebaseUser
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-pink-50">
+      <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-pink-50 min-h-[450px] flex flex-col">
         <h3 className="text-lg font-bold text-gray-800 mb-6">Tren DMF-T & OHI-S</h3>
-        <div className="h-64">
+        <div className="flex-1 w-full min-h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={MOCK_STATS}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -2739,51 +2769,250 @@ const Reports = () => (
   </div>
 );
 
-const SecurityModule = () => (
-  <div className="space-y-6">
-    <header>
-      <h1 className="text-2xl font-bold text-gray-800">Keamanan & Audit Data</h1>
-      <p className="text-gray-500">Pemantauan akses dan integritas rekam medis</p>
-    </header>
+const SecurityModule = ({ user }: { user: FirebaseUser | null }) => {
+  const [authorizedEmails, setAuthorizedEmails] = useState<{ id: string, email: string, role: string }[]>([]);
+  const [newEmail, setNewEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <ShieldCheck className="text-green-500" /> Status Enkripsi
-        </h3>
-        <div className="space-y-4">
-          <div className="flex justify-between items-center p-4 bg-green-50 rounded-2xl border border-green-100">
-            <span className="text-sm font-bold text-green-700">Database Encryption (AES-256)</span>
-            <span className="px-2 py-1 bg-green-500 text-white text-[10px] font-black rounded uppercase">Active</span>
-          </div>
-          <div className="flex justify-between items-center p-4 bg-green-50 rounded-2xl border border-green-100">
-            <span className="text-sm font-bold text-green-700">Automatic Backup (Cloud)</span>
-            <span className="text-xs text-green-600">Terakhir: 5 Menit Lalu</span>
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(collection(db, 'authorized_emails'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const emails = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as { id: string, email: string, role: string }[];
+      setAuthorizedEmails(emails);
+    }, (error) => {
+      // Only handle error if user is still logged in
+      if (auth.currentUser) {
+        handleFirestoreError(error, OperationType.GET, 'authorized_emails');
+      }
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmail) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      // Check if already exists
+      const q = query(collection(db, 'authorized_emails'), where('email', '==', newEmail.toLowerCase()));
+      const existing = await getDocs(q).catch(err => {
+        handleFirestoreError(err, OperationType.GET, 'authorized_emails');
+        throw err;
+      });
+      if (!existing.empty) {
+        setError('Email sudah terdaftar sebagai admin.');
+        return;
+      }
+
+      await addDoc(collection(db, 'authorized_emails'), {
+        email: newEmail.toLowerCase(),
+        role: 'Admin',
+        createdAt: Timestamp.now()
+      });
+      setNewEmail('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'authorized_emails');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'authorized_emails', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'authorized_emails');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold text-gray-800">Keamanan & Audit Data</h1>
+        <p className="text-gray-500">Pemantauan akses dan manajemen hak akses admin</p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Manajemen Admin Section */}
+        <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-sm space-y-6">
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <Users className="text-pink-500" /> Manajemen Admin Tambahan
+          </h3>
+          
+          <form onSubmit={handleAddAdmin} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Email Admin Baru</label>
+              <div className="flex gap-2">
+                <input 
+                  type="email" 
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="contoh@gmail.com"
+                  className="flex-1 p-3 rounded-xl border-pink-100 focus:ring-pink-500 focus:border-pink-500 bg-pink-50/30 text-sm"
+                  required
+                />
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-pink-500 text-white rounded-xl font-bold text-sm hover:bg-pink-600 transition-all disabled:opacity-50"
+                >
+                  {isLoading ? <RefreshCw size={18} className="animate-spin" /> : <Plus size={18} />}
+                </button>
+              </div>
+              {error && <p className="text-red-500 text-xs mt-1 font-bold">{error}</p>}
+            </div>
+          </form>
+
+          <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+            <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest">Daftar Email Terotorisasi</p>
+            {authorizedEmails.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Belum ada admin tambahan.</p>
+            ) : (
+              authorizedEmails.map((item) => (
+                <div key={item.id} className="flex justify-between items-center p-3 bg-pink-50/50 rounded-2xl border border-pink-50">
+                  <div className="flex items-center gap-2">
+                    <Mail size={14} className="text-pink-400" />
+                    <span className="text-sm font-medium text-gray-700">{item.email}</span>
+                  </div>
+                  <button 
+                    onClick={() => handleRemoveAdmin(item.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Hapus Akses"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-800 mb-6">Audit Trail (Aktivitas Terakhir)</h3>
-        <div className="space-y-3">
-          {[].map((log, i) => (
-            <div key={i} className="flex justify-between items-center text-sm p-2 border-b border-pink-50 last:border-0">
-              <span className="font-bold text-gray-700">{log.user}</span>
-              <span className="text-gray-500">{log.action}</span>
-              <span className="text-xs text-pink-400">{log.time}</span>
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <ShieldCheck className="text-green-500" /> Status Enkripsi
+            </h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center p-4 bg-green-50 rounded-2xl border border-green-100">
+                <span className="text-sm font-bold text-green-700">Database Encryption (AES-256)</span>
+                <span className="px-2 py-1 bg-green-500 text-white text-[10px] font-black rounded uppercase">Active</span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-green-50 rounded-2xl border border-green-100">
+                <span className="text-sm font-bold text-green-700">Automatic Backup (Cloud)</span>
+                <span className="text-xs text-green-600">Terakhir: 5 Menit Lalu</span>
+              </div>
             </div>
-          ))}
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-6">Audit Trail (Aktivitas Terakhir)</h3>
+            <div className="space-y-3">
+              <p className="text-xs text-gray-400 italic">Memuat log aktivitas...</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
+
+const SettingsPage = ({ user, userRole }: { user: FirebaseUser | null, userRole: string }) => {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-800">Pengaturan Akun</h2>
+      </div>
+
+      <div className="bg-white p-8 rounded-3xl border border-pink-100 shadow-sm">
+        <div className="flex flex-col md:flex-row items-center gap-8">
+          <div className="relative">
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt="Profile" className="w-32 h-32 rounded-3xl object-cover border-4 border-pink-50 shadow-lg" referrerPolicy="no-referrer" />
+            ) : (
+              <div className="w-32 h-32 rounded-3xl bg-pink-100 flex items-center justify-center text-pink-500 text-4xl font-black border-4 border-pink-50 shadow-lg">
+                {(user?.displayName || 'U')[0]}
+              </div>
+            )}
+            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-pink-500 rounded-xl flex items-center justify-center text-white shadow-lg border-4 border-white">
+              <PenTool size={18} />
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-4 text-center md:text-left">
+            <div>
+              <h3 className="text-2xl font-bold text-gray-800">{user?.displayName || 'Pengguna'}</h3>
+              <p className="text-pink-500 font-medium">{user?.email}</p>
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-pink-50 text-pink-600 rounded-xl border border-pink-100 font-bold text-sm">
+              <ShieldCheck size={16} />
+              Role: {userRole}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <h4 className="font-bold text-gray-800 flex items-center gap-2">
+              <User size={18} className="text-pink-500" />
+              Informasi Pribadi
+            </h4>
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Nama Lengkap</p>
+                <p className="font-bold text-gray-800">{user?.displayName || '-'}</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Email</p>
+                <p className="font-bold text-gray-800">{user?.email || '-'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="font-bold text-gray-800 flex items-center gap-2">
+              <Lock size={18} className="text-pink-500" />
+              Keamanan & Sesi
+            </h4>
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Terakhir Masuk</p>
+                <p className="font-bold text-gray-800">{user?.metadata.lastSignInTime ? new Date(user.metadata.lastSignInTime).toLocaleString('id-ID') : '-'}</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">ID Pengguna</p>
+                <p className="font-mono text-[10px] text-gray-500 truncate">{user?.uid}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 pt-8 border-t border-pink-50">
+          <button className="px-6 py-3 bg-pink-500 text-white rounded-xl font-bold shadow-lg shadow-pink-200 hover:bg-pink-600 transition-all flex items-center gap-2">
+            <RefreshCw size={18} />
+            Perbarui Profil
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 
 const Layout = ({ children, userRole, onLogout, user }: { children: React.ReactNode, userRole: string, onLogout: () => void, user: FirebaseUser | null }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const location = useLocation();
 
-  const menuItems = [
+  const allMenuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
     { icon: Users, label: 'Data Master Pasien', to: '/patients' },
     { icon: ClipboardList, label: 'Rekam Dental Hygiene', to: '/records' },
@@ -2794,6 +3023,20 @@ const Layout = ({ children, userRole, onLogout, user }: { children: React.ReactN
     { icon: ShieldCheck, label: 'Keamanan', to: '/security' },
     { icon: Settings, label: 'Pengaturan', to: '/settings' },
   ];
+
+  const menuItems = allMenuItems.filter(item => {
+    if (userRole === 'Admin') return true;
+    if (userRole === 'Operator') {
+      return !['/patients', '/reports', '/security'].includes(item.to);
+    }
+    if (userRole === 'Pasien') {
+      return item.to === '/schedule';
+    }
+    if (userRole === 'Dosen Pembimbing') {
+      return item.to !== '/settings';
+    }
+    return true; // Default for other roles if any
+  });
 
   return (
     <div className="min-h-screen bg-[#fff5f8] flex font-sans text-gray-900">
@@ -2830,7 +3073,7 @@ const Layout = ({ children, userRole, onLogout, user }: { children: React.ReactN
           )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-2">
+        <nav className="flex-1 px-4 space-y-2 overflow-y-auto custom-scrollbar py-2">
           {menuItems.map((item) => (
             <SidebarItem 
               key={item.to} 
@@ -2842,33 +3085,72 @@ const Layout = ({ children, userRole, onLogout, user }: { children: React.ReactN
           ))}
         </nav>
 
-        <div className="p-4 border-t border-pink-50">
+        <div className="p-4 border-t border-pink-50 bg-white">
           <button 
             onClick={onLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all group"
           >
-            <LogOut size={20} />
-            {isSidebarOpen && <span className="font-medium">Keluar</span>}
+            <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
+            {isSidebarOpen && <span className="font-bold">Keluar Sesi</span>}
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className={cn(
-        "flex-1 transition-all duration-300 p-8",
+        "flex-1 transition-all duration-300",
         isSidebarOpen ? "ml-64" : "ml-20"
       )}>
-        <div className="max-w-7xl mx-auto">
+        {/* Top Header */}
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-pink-100 px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 text-pink-500 hover:bg-pink-50 rounded-xl transition-all"
+            >
+              {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+            </button>
+            <h1 className="text-lg font-bold text-gray-800">
+              {menuItems.find(item => item.to === location.pathname)?.label || 'Dashboard'}
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-pink-50 rounded-2xl border border-pink-100">
+              <div className="text-right">
+                <p className="text-xs font-black text-gray-800 leading-none">{user?.displayName || 'User'}</p>
+                <p className="text-[10px] font-bold text-pink-500 uppercase tracking-widest">{userRole}</p>
+              </div>
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold text-xs">
+                  {(user?.displayName || 'U')[0]}
+                </div>
+              )}
+            </div>
+            
+            <button 
+              onClick={onLogout}
+              className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
+              title="Keluar Sesi"
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
+        </header>
+
+        <div className="p-8 max-w-7xl mx-auto">
           {children}
         </div>
       </main>
 
-      {/* Toggle Button */}
+      {/* Floating Toggle Button (Mobile/Tablet) */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed bottom-8 left-8 z-50 w-10 h-10 bg-white border border-pink-100 rounded-full shadow-lg flex items-center justify-center text-pink-500 hover:bg-pink-50 transition-all"
+        className="fixed bottom-8 right-8 lg:hidden z-50 w-12 h-12 bg-pink-500 text-white rounded-full shadow-xl shadow-pink-200 flex items-center justify-center hover:bg-pink-600 transition-all"
       >
-        {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
     </div>
   );
@@ -2891,11 +3173,34 @@ export default function App() {
           if (userDoc.exists()) {
             setUserRole(userDoc.data().role);
           } else {
-            setUserRole('Terapis Gigi'); // Default
+            // Check if email is pre-authorized as Admin
+            const q = query(collection(db, 'authorized_emails'), where('email', '==', firebaseUser.email?.toLowerCase()));
+            const authDocs = await getDocs(q).catch(err => {
+              handleFirestoreError(err, OperationType.GET, 'authorized_emails');
+              throw err;
+            });
+            if (!authDocs.empty) {
+              const role = 'Admin';
+              setUserRole(role);
+              // Auto-create user doc if pre-authorized
+              await setDoc(doc(db, 'users', firebaseUser.uid), {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+                role: role,
+                createdAt: Timestamp.now()
+              }).catch(err => {
+                handleFirestoreError(err, OperationType.WRITE, `users/${firebaseUser.uid}`);
+                throw err;
+              });
+            } else {
+              setUserRole('Pasien'); // Default
+            }
           }
         } catch (err) {
           console.error("Error fetching user role:", err);
-          setUserRole('Terapis Gigi');
+          setUserRole('Pasien');
         }
       } else {
         setUser(null);
@@ -2968,7 +3273,8 @@ export default function App() {
             <Route path="/education" element={<EducationPage />} />
             <Route path="/admin" element={<AdminManagement />} />
             <Route path="/reports" element={<Reports />} />
-            <Route path="/security" element={<SecurityModule />} />
+            <Route path="/security" element={<SecurityModule user={user} />} />
+            <Route path="/settings" element={<SettingsPage user={user} userRole={userRole} />} />
             <Route path="*" element={<Dashboard patients={patients} user={user} />} />
           </Routes>
         </Layout>

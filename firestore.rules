@@ -12,7 +12,14 @@ service cloud.firestore {
     //   - email: string (required, email format)
     //   - displayName: string (optional)
     //   - photoURL: string (optional, URL format)
-    //   - role: string (required, enum: ["Admin", "Dokter Gigi", "Terapis Gigi"])
+    //   - role: string (required, enum: ["Admin", "Operator", "Pasien", "Dosen Pembimbing"])
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: authorized_emails
+    // Document ID: {id} (Auto-generated)
+    // Fields:
+    //   - email: string (required, email format)
+    //   - role: string (required, "Admin")
     //   - createdAt: timestamp (required)
     //
     // Collection: patients
@@ -22,8 +29,6 @@ service cloud.firestore {
     //   - medicalRecordNumber: string (required, unique)
     //   - gender: string (required, enum: ["L", "P"])
     //   - birthDate: string (required, date format)
-    //   - address: string (optional)
-    //   - phone: string (optional)
     //   - createdAt: timestamp (required)
     //   - createdBy: string (required, userId)
     //
@@ -41,23 +46,25 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function getUserData() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data : null;
+    }
+
     function isAdmin() {
+      let data = getUserData();
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin' ||
+        ((data != null && data.role == 'Admin') ||
          (request.auth.token.email == "rikaruziana683@gmail.com" && request.auth.token.email_verified == true));
     }
 
     function isStaff() {
       return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'Dokter Gigi', 'Terapis Gigi'];
+        getUserData().role in ['Admin', 'Operator', 'Dosen Pembimbing'];
     }
 
     function isValidEmail(email) {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidUrl(url) {
-      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -72,7 +79,7 @@ service cloud.firestore {
       function isValidUser(data) {
         return data.uid is string && data.uid == userId &&
                isValidEmail(data.email) &&
-               (data.role in ['Admin', 'Dokter Gigi', 'Terapis Gigi']) &&
+               (data.role in ['Admin', 'Operator', 'Pasien', 'Dosen Pembimbing']) &&
                data.createdAt is timestamp;
       }
 
@@ -81,13 +88,18 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                       isOwner(userId) && 
                       isValidUser(request.resource.data) &&
-                      (request.resource.data.role == 'Terapis Gigi' || isAdmin());
+                      (request.resource.data.role == 'Pasien' || isAdmin());
                       
       allow update: if isAuthenticated() && 
                       isValidUser(request.resource.data) &&
                       (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
       
       allow delete: if isAdmin();
+    }
+
+    match /authorized_emails/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /patients/{patientId} {
@@ -100,15 +112,25 @@ service cloud.firestore {
                data.createdBy == request.auth.uid;
       }
 
-      allow read: if isStaff();
+      // Operator cannot access patients (data master) per request
+      allow read: if isAdmin() || getUserData().role == 'Dosen Pembimbing';
       
-      allow create: if isStaff() && isValidPatient(request.resource.data);
+      allow create: if isAdmin() || getUserData().role == 'Dosen Pembimbing';
       
-      allow update: if isStaff() && 
-                      isValidPatient(request.resource.data) &&
-                      request.resource.data.medicalRecordNumber == resource.data.medicalRecordNumber;
+      allow update: if (isAdmin() || getUserData().role == 'Dosen Pembimbing') && 
+                      isValidPatient(request.resource.data);
       
       allow delete: if isAdmin();
+    }
+
+    // Allow staff to access other collections (records, schedule, etc.)
+    match /records/{recordId} {
+      allow read, write: if isStaff();
+    }
+
+    match /schedule/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff() || isOwner(resource.data.userId);
     }
 
     // Default deny

@@ -9,10 +9,21 @@
         "email": { "type": "string", "format": "email" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["Admin", "Dokter Gigi", "Terapis Gigi"] },
+        "role": { "type": "string", "enum": ["Admin", "Operator", "Pasien", "Dosen Pembimbing"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]
+    },
+    "AuthorizedEmail": {
+      "title": "Authorized Email",
+      "description": "Emails authorized for Admin role",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
     },
     "Patient": {
       "title": "Patient",
@@ -40,6 +51,10 @@
     "/patients/{patientId}": {
       "schema": "Patient",
       "description": "Patient records"
+    },
+    "/authorized_emails/{id}": {
+      "schema": "AuthorizedEmail",
+      "description": "Authorized admin emails"
     }
   }
 }
