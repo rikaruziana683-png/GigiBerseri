@@ -349,13 +349,15 @@ const Login = ({ onLogin }: { onLogin: (role: string, user?: FirebaseUser) => vo
       let role = 'Pasien'; // Default role
       
       if (!userDoc.exists()) {
-        // Check if email is pre-authorized as Admin
+        // Check if email is pre-authorized as Admin or is the hardcoded super admin
+        const isSuperAdmin = user.email?.toLowerCase() === 'rikaruziana683@gmail.com';
         const q = query(collection(db, 'authorized_emails'), where('email', '==', user.email?.toLowerCase()));
         const authDocs = await getDocs(q).catch(err => {
           handleFirestoreError(err, OperationType.GET, 'authorized_emails');
           throw err;
         });
-        if (!authDocs.empty) {
+        
+        if (!authDocs.empty || isSuperAdmin) {
           role = 'Admin';
         }
 
@@ -624,7 +626,7 @@ const Dashboard = ({ patients, user }: { patients: Patient[], user: FirebaseUser
   </div>
 );
 
-const PatientList = ({ patients, onAddPatient }: { patients: Patient[], onAddPatient: (p: Patient) => void }) => {
+const PatientList = ({ patients, onAddPatient, showToast }: { patients: Patient[], onAddPatient: (p: Patient) => void, showToast: (m: string, t?: 'success' | 'error') => void }) => {
   const [showModal, setShowModal] = useState(false);
   const [newPatient, setNewPatient] = useState<Partial<Patient>>({
     gender: 'L',
@@ -636,7 +638,7 @@ const PatientList = ({ patients, onAddPatient }: { patients: Patient[], onAddPat
 
   const handleSave = () => {
     if (!newPatient.name || !newPatient.nik) {
-      alert('Nama dan NIK wajib diisi!');
+      showToast('Nama dan NIK wajib diisi!', 'error');
       return;
     }
     const patient: Patient = {
@@ -926,7 +928,7 @@ const EducationPage = () => {
   );
 };
 
-const AdminManagement = () => {
+const AdminManagement = ({ showToast }: { showToast: (m: string, t?: 'success' | 'error') => void }) => {
   const admins = [
     { name: 'Drg. Rika', role: 'Super Admin', email: 'rika@gigiberseri.com', status: 'Online' },
     { name: 'Sarah Admin', role: 'Administrator', email: 'sarah@gigiberseri.com', status: 'Offline' },
@@ -1001,7 +1003,7 @@ const AdminManagement = () => {
             if (window.aistudio) {
               await window.aistudio.openSelectKey();
             } else {
-              alert('Fitur ini hanya tersedia di lingkungan AI Studio.');
+              showToast('Fitur ini hanya tersedia di lingkungan AI Studio.', 'error');
             }
           }}
           className="px-6 py-3 bg-white text-pink-500 rounded-xl font-bold shadow-lg hover:bg-pink-50 transition-all"
@@ -1013,7 +1015,7 @@ const AdminManagement = () => {
   );
 };
 
-const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[], records: Record<string, any>, onSaveRecord: (id: string, data: any) => void }) => {
+const DentalRecord = ({ patients, records, onSaveRecord, showToast }: { patients: Patient[], records: Record<string, any>, onSaveRecord: (id: string, data: any) => void, showToast: (m: string, t?: 'success' | 'error') => void }) => {
   const { id } = useParams();
   const patient = patients.find(p => p.id === id);
   
@@ -1188,7 +1190,7 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
         informedConsent,
         timestamp: new Date().toISOString()
       });
-      alert('Rekam medis berhasil disimpan!');
+      showToast('Rekam medis berhasil disimpan!');
     }
   };
 
@@ -1246,7 +1248,7 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
       });
     } catch (error) {
       console.error("AI Analysis failed:", error);
-      alert("Gagal menghasilkan analisis AI. Silakan isi secara manual.");
+      showToast("Gagal menghasilkan analisis AI. Silakan isi secara manual.", "error");
     } finally {
       setIsAnalyzing(false);
     }
@@ -3162,8 +3164,25 @@ export default function App() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [records, setRecords] = useState<Record<string, any>>({});
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [patients, setPatients] = useState<Patient[]>(() => {
+    try {
+      const saved = localStorage.getItem('gigiberseri_patients');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Error loading patients from localStorage:", e);
+      return [];
+    }
+  });
+  const [records, setRecords] = useState<Record<string, any>>(() => {
+    try {
+      const saved = localStorage.getItem('gigiberseri_records');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      console.error("Error loading records from localStorage:", e);
+      return {};
+    }
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -3175,13 +3194,15 @@ export default function App() {
           if (userDoc.exists()) {
             setUserRole(userDoc.data().role);
           } else {
-            // Check if email is pre-authorized as Admin
+            // Check if email is pre-authorized as Admin or is the hardcoded super admin
+            const isSuperAdmin = firebaseUser.email?.toLowerCase() === 'rikaruziana683@gmail.com';
             const q = query(collection(db, 'authorized_emails'), where('email', '==', firebaseUser.email?.toLowerCase()));
             const authDocs = await getDocs(q).catch(err => {
               handleFirestoreError(err, OperationType.GET, 'authorized_emails');
               throw err;
             });
-            if (!authDocs.empty) {
+            
+            if (!authDocs.empty || isSuperAdmin) {
               const role = 'Admin';
               setUserRole(role);
               // Auto-create user doc if pre-authorized
@@ -3221,6 +3242,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('gigiberseri_records', JSON.stringify(records));
   }, [records]);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleLogin = (role: string, firebaseUser?: FirebaseUser) => {
     setUserRole(role);
@@ -3266,14 +3292,30 @@ export default function App() {
     <ErrorBoundary>
       <Router>
         <Layout userRole={userRole} onLogout={handleLogout} user={user}>
+          <AnimatePresence>
+            {toast && (
+              <motion.div 
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 50 }}
+                className={cn(
+                  "fixed bottom-8 right-8 z-[200] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold",
+                  toast.type === 'success' ? "bg-green-500 text-white" : "bg-red-500 text-white"
+                )}
+              >
+                {toast.type === 'success' ? <CheckCircle2 size={20} /> : <X size={20} />}
+                {toast.message}
+              </motion.div>
+            )}
+          </AnimatePresence>
           <Routes>
             <Route path="/" element={<Dashboard patients={patients} user={user} />} />
-            <Route path="/patients" element={<PatientList patients={patients} onAddPatient={addPatient} />} />
+            <Route path="/patients" element={<PatientList patients={patients} onAddPatient={addPatient} showToast={showToast} />} />
             <Route path="/records" element={<RecordsList patients={patients} />} />
-            <Route path="/patient/:id" element={<DentalRecord patients={patients} records={records} onSaveRecord={saveRecord} />} />
+            <Route path="/patient/:id" element={<DentalRecord patients={patients} records={records} onSaveRecord={saveRecord} showToast={showToast} />} />
             <Route path="/schedule" element={<Schedule patients={patients} />} />
             <Route path="/education" element={<EducationPage />} />
-            <Route path="/admin" element={<AdminManagement />} />
+            <Route path="/admin" element={<AdminManagement showToast={showToast} />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/security" element={<SecurityModule user={user} />} />
             <Route path="/settings" element={<SettingsPage user={user} userRole={userRole} />} />
