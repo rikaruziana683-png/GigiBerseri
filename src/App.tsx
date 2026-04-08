@@ -1125,6 +1125,12 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
   // SOAPIE Evaluation
   const [evaluation, setEvaluation] = useState('');
 
+  // Informed Consent State
+  const [informedConsent, setInformedConsent] = useState({
+    signerName: patient.name,
+    operatorName: 'Amir (Mahasiswa)'
+  });
+
   // Load existing record
   useEffect(() => {
     if (id && records[id]) {
@@ -1162,8 +1168,9 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
         }
       }));
       setEvaluation(data.evaluation || '');
+      setInformedConsent(prev => ({ ...prev, ...(data.informedConsent || {}) }));
     }
-  }, [id, records]);
+  }, [id, records, patient.name]);
 
   const handleSaveAll = () => {
     if (id) {
@@ -1178,6 +1185,7 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
         vitalSigns,
         exam,
         evaluation,
+        informedConsent,
         timestamp: new Date().toISOString()
       });
       alert('Rekam medis berhasil disimpan!');
@@ -2430,11 +2438,21 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
               <div className="grid grid-cols-2 gap-12 pt-8">
                 <div className="text-center space-y-12">
                   <p className="text-xs font-bold text-gray-400 uppercase">Pasien / Wali</p>
-                  <p className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1">{patient.name}</p>
+                  <input 
+                    type="text"
+                    className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1 text-center w-full focus:outline-none focus:border-pink-500 transition-colors bg-transparent"
+                    value={informedConsent.signerName}
+                    onChange={(e) => setInformedConsent({...informedConsent, signerName: e.target.value})}
+                  />
                 </div>
                 <div className="text-center space-y-12">
                   <p className="text-xs font-bold text-gray-400 uppercase">Operator (TGM)</p>
-                  <p className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1">Amir (Mahasiswa)</p>
+                  <input 
+                    type="text"
+                    className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-1 text-center w-full focus:outline-none focus:border-pink-500 transition-colors bg-transparent"
+                    value={informedConsent.operatorName}
+                    onChange={(e) => setInformedConsent({...informedConsent, operatorName: e.target.value})}
+                  />
                 </div>
               </div>
             </div>
