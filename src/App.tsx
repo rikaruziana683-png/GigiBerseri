@@ -1116,10 +1116,10 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
     extraOral: {} as Record<string, string>,
     intraOral: {} as Record<string, string>,
     ohis: { 
+      teeth: [16, 11, 26, 36, 31, 46],
       debris: [0,0,0,0,0,0], 
       calculus: [0,0,0,0,0,0] 
-    },
-    plaqueControl: {} as Record<number, boolean>
+    }
   });
 
   // SOAPIE Evaluation
@@ -1153,7 +1153,14 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
         part4: { ...prev.part4, ...(data.dentalHistory?.part4 || {}) }
       }));
       setVitalSigns(prev => ({ ...prev, ...(data.vitalSigns || {}) }));
-      setExam(prev => ({ ...prev, ...(data.exam || {}) }));
+      setExam(prev => ({ 
+        ...prev, 
+        ...(data.exam || {}),
+        ohis: {
+          ...prev.ohis,
+          ...(data.exam?.ohis || {})
+        }
+      }));
       setEvaluation(data.evaluation || '');
     }
   }, [id, records]);
@@ -1670,143 +1677,120 @@ const DentalRecord = ({ patients, records, onSaveRecord }: { patients: Patient[]
               </section>
 
               <section className="space-y-8">
-                <div className="bg-pink-50/50 p-8 rounded-3xl border border-pink-100">
-                  <h3 className="text-lg font-bold text-gray-800 mb-6">OHI-S (Oral Hygiene Index Simplified)</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-xs font-bold text-pink-500 uppercase mb-4 tracking-widest">Debris Index (DI)</p>
-                      <div className="grid grid-cols-6 gap-2">
-                        {exam.ohis.debris.map((val, idx) => (
-                          <input 
-                            key={idx}
-                            type="number"
-                            min="0" max="3"
-                            className="w-full p-2 text-center rounded-lg border-pink-100 bg-white text-sm font-bold"
-                            value={val}
-                            onChange={(e) => {
-                              const newDebris = [...exam.ohis.debris];
-                              newDebris[idx] = parseInt(e.target.value) || 0;
-                              setExam({...exam, ohis: {...exam.ohis, debris: newDebris}});
-                            }}
-                          />
+                <div className="bg-white p-8 rounded-3xl border border-pink-100 shadow-sm">
+                  <h3 className="text-lg font-bold text-gray-800 mb-8 flex items-center gap-2">
+                    <div className="w-1.5 h-6 bg-pink-500 rounded-full" />
+                    Pemeriksaan OHI-S (Oral Hygiene Index Simplified)
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-pink-50">
+                          <th className="py-4 px-2 text-xs font-black text-pink-500 uppercase tracking-widest">Gigi Indeks</th>
+                          <th className="py-4 px-2 text-xs font-black text-pink-500 uppercase tracking-widest text-center">Debris Index (DI)</th>
+                          <th className="py-4 px-2 text-xs font-black text-pink-500 uppercase tracking-widest text-center">Calculus Index (CI)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {exam.ohis.teeth.map((tooth, idx) => (
+                          <tr key={idx} className="border-b border-pink-50/50 last:border-0">
+                            <td className="py-4 px-2">
+                              <input 
+                                type="number"
+                                className="w-16 p-2 text-center rounded-lg border-pink-100 bg-pink-50/30 text-sm font-bold"
+                                value={tooth}
+                                onChange={(e) => {
+                                  const newTeeth = [...exam.ohis.teeth];
+                                  newTeeth[idx] = parseInt(e.target.value) || 0;
+                                  setExam({...exam, ohis: {...exam.ohis, teeth: newTeeth}});
+                                }}
+                              />
+                            </td>
+                            <td className="py-4 px-2">
+                              <div className="flex justify-center gap-1">
+                                {[0, 1, 2, 3].map(val => (
+                                  <button
+                                    key={val}
+                                    onClick={() => {
+                                      const newDebris = [...exam.ohis.debris];
+                                      newDebris[idx] = val;
+                                      setExam({...exam, ohis: {...exam.ohis, debris: newDebris}});
+                                    }}
+                                    className={cn(
+                                      "w-8 h-8 rounded-lg border text-xs font-bold transition-all",
+                                      exam.ohis.debris[idx] === val
+                                        ? "bg-pink-500 border-pink-500 text-white shadow-md shadow-pink-100"
+                                        : "bg-white border-pink-100 text-pink-400 hover:bg-pink-50"
+                                    )}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-4 px-2">
+                              <div className="flex justify-center gap-1">
+                                {[0, 1, 2, 3].map(val => (
+                                  <button
+                                    key={val}
+                                    onClick={() => {
+                                      const newCalculus = [...exam.ohis.calculus];
+                                      newCalculus[idx] = val;
+                                      setExam({...exam, ohis: {...exam.ohis, calculus: newCalculus}});
+                                    }}
+                                    className={cn(
+                                      "w-8 h-8 rounded-lg border text-xs font-bold transition-all",
+                                      exam.ohis.calculus[idx] === val
+                                        ? "bg-purple-500 border-purple-500 text-white shadow-md shadow-purple-100"
+                                        : "bg-white border-pink-100 text-purple-400 hover:bg-pink-50"
+                                    )}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
                         ))}
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-2 text-center">Gigi: 16, 11, 26, 36, 31, 46</p>
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  <div className="mt-8 pt-8 border-t border-pink-100 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-pink-50/50 p-4 rounded-2xl border border-pink-100 text-center">
+                      <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-1">Skor Debris (DI)</p>
+                      <p className="text-2xl font-black text-pink-600">
+                        {(exam.ohis.debris.reduce((a,b) => a+b, 0) / 6).toFixed(1)}
+                      </p>
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-pink-500 uppercase mb-4 tracking-widest">Calculus Index (CI)</p>
-                      <div className="grid grid-cols-6 gap-2">
-                        {exam.ohis.calculus.map((val, idx) => (
-                          <input 
-                            key={idx}
-                            type="number"
-                            min="0" max="3"
-                            className="w-full p-2 text-center rounded-lg border-pink-100 bg-white text-sm font-bold"
-                            value={val}
-                            onChange={(e) => {
-                              const newCalculus = [...exam.ohis.calculus];
-                              newCalculus[idx] = parseInt(e.target.value) || 0;
-                              setExam({...exam, ohis: {...exam.ohis, calculus: newCalculus}});
-                            }}
-                          />
-                        ))}
-                      </div>
+                    <div className="bg-purple-50/50 p-4 rounded-2xl border border-purple-100 text-center">
+                      <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">Skor Calculus (CI)</p>
+                      <p className="text-2xl font-black text-purple-600">
+                        {(exam.ohis.calculus.reduce((a,b) => a+b, 0) / 6).toFixed(1)}
+                      </p>
                     </div>
-                    <div className="pt-4 border-t border-pink-100 flex justify-between items-center">
-                      <span className="text-sm font-bold text-gray-600">Total OHI-S:</span>
-                      <span className="text-2xl font-black text-pink-500">
+                    <div className="bg-pink-500 p-4 rounded-2xl text-center shadow-lg shadow-pink-200">
+                      <p className="text-[10px] font-black text-pink-100 uppercase tracking-widest mb-1">Total OHI-S</p>
+                      <p className="text-2xl font-black text-white">
                         {((exam.ohis.debris.reduce((a,b) => a+b, 0) + exam.ohis.calculus.reduce((a,b) => a+b, 0)) / 6).toFixed(1)}
-                      </span>
+                      </p>
                     </div>
+                  </div>
+                  
+                  <div className="mt-6 text-center">
+                    <p className="text-xs font-bold text-gray-500">
+                      Kategori: {(() => {
+                        const score = (exam.ohis.debris.reduce((a,b) => a+b, 0) + exam.ohis.calculus.reduce((a,b) => a+b, 0)) / 6;
+                        if (score <= 1.2) return <span className="text-green-500 font-black">Baik (0.0 - 1.2)</span>;
+                        if (score <= 3.0) return <span className="text-orange-500 font-black">Sedang (1.3 - 3.0)</span>;
+                        return <span className="text-red-500 font-black">Buruk (3.1 - 6.0)</span>;
+                      })()}
+                    </p>
                   </div>
                 </div>
               </section>
             </div>
 
-            <section className="bg-white p-8 rounded-3xl border border-pink-100 shadow-sm">
-              <h3 className="text-lg font-bold text-gray-800 mb-8 flex items-center gap-2">
-                <div className="w-1.5 h-6 bg-pink-500 rounded-full" />
-                Plaque Control Index (Kunjungan I)
-              </h3>
-              <div className="flex flex-col items-center space-y-4">
-                <div className="flex flex-col items-center space-y-2">
-                  <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">Rahang Atas</span>
-                  <div className="grid grid-cols-16 gap-1">
-                    {[18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28].map(num => (
-                      <button 
-                        key={num}
-                        onClick={() => setExam({...exam, plaqueControl: {...exam.plaqueControl, [num]: !exam.plaqueControl[num]}})}
-                        className={cn(
-                          "w-6 h-6 border rounded flex items-center justify-center text-[8px] font-bold transition-all",
-                          exam.plaqueControl[num] ? "bg-red-500 border-red-600 text-white" : "bg-white border-pink-100 text-gray-300"
-                        )}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-16 gap-1">
-                    {[null, null, null, 55, 54, 53, 52, 51, 61, 62, 63, 64, 65, null, null, null].map((num, idx) => (
-                      num ? (
-                        <button 
-                          key={num}
-                          onClick={() => setExam({...exam, plaqueControl: {...exam.plaqueControl, [num]: !exam.plaqueControl[num]}})}
-                          className={cn(
-                            "w-6 h-6 border rounded flex items-center justify-center text-[8px] font-bold transition-all",
-                            exam.plaqueControl[num] ? "bg-red-500 border-red-600 text-white" : "bg-white border-pink-100 text-gray-300"
-                          )}
-                        >
-                          {num}
-                        </button>
-                      ) : <div key={`empty-p-up-${idx}`} className="w-6 h-6" />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="grid grid-cols-16 gap-1">
-                    {[null, null, null, 85, 84, 83, 82, 81, 71, 72, 73, 74, 75, null, null, null].map((num, idx) => (
-                      num ? (
-                        <button 
-                          key={num}
-                          onClick={() => setExam({...exam, plaqueControl: {...exam.plaqueControl, [num]: !exam.plaqueControl[num]}})}
-                          className={cn(
-                            "w-6 h-6 border rounded flex items-center justify-center text-[8px] font-bold transition-all",
-                            exam.plaqueControl[num] ? "bg-red-500 border-red-600 text-white" : "bg-white border-pink-100 text-gray-300"
-                          )}
-                        >
-                          {num}
-                        </button>
-                      ) : <div key={`empty-p-low-${idx}`} className="w-6 h-6" />
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-16 gap-1">
-                    {[48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38].map(num => (
-                      <button 
-                        key={num}
-                        onClick={() => setExam({...exam, plaqueControl: {...exam.plaqueControl, [num]: !exam.plaqueControl[num]}})}
-                        className={cn(
-                          "w-6 h-6 border rounded flex items-center justify-center text-[8px] font-bold transition-all",
-                          exam.plaqueControl[num] ? "bg-red-500 border-red-600 text-white" : "bg-white border-pink-100 text-gray-300"
-                        )}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">Rahang Bawah</span>
-                </div>
-                <div className="pt-6 text-center">
-                  <p className="text-sm font-bold text-gray-600">Skor Plaque Control:</p>
-                  <p className="text-4xl font-black text-pink-500">
-                    {(Object.values(exam.plaqueControl).filter(v => v).length / 32 * 100).toFixed(0)}%
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Kategori: {(Object.values(exam.plaqueControl).filter(v => v).length / 32 * 100) < 15 ? 'Baik' : 'Buruk'}
-                  </p>
-                </div>
-              </div>
-            </section>
           </div>
         )}
 
